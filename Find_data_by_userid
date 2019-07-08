@@ -1,0 +1,327 @@
+import json
+import time
+import requests
+from urllib import parse
+import datetime
+
+
+def get_day_month_year(created_at):
+    contents = created_at.split(' ')
+    year = contents[5]
+
+    day = contents[2]
+
+    month_al = contents[1]
+
+    if month_al == "Jan":
+        month = "01"
+    elif month_al == "Feb":
+        month = "02"
+    elif month_al == "Mar":
+        month = "03"
+    elif month_al == "Apr":
+        month = "04"
+    elif month_al == "May":
+        month = "05"
+    elif month_al == "Jun":
+        month = "06"
+    elif month_al == "Jul":
+        month = "07"
+    elif month_al == "Aug":
+        month = "08"
+    elif month_al == "Sep":
+        month = "09"
+    elif month_al == "Oct":
+        month = "10"
+    elif month_al == "Nov":
+        month = "11"
+    elif month_al == "Dec":
+        month = "12"
+
+    return day, month, year
+
+
+
+
+
+def get_lng_lat(weibo_page_title):
+    print("日志：现在进入，获取，POI经纬度，环节")
+
+    loc = weibo_page_title
+    print("日志：location : ", loc)
+
+    for loc_i in range(len(loc)):
+        element = loc[loc_i]
+
+        element_byte_str = str(element.encode("utf-8")).split('\\')
+        if len(element_byte_str) != 4:
+            loc = loc.replace(loc[loc_i], ' ')
+
+    print("日志：location : ", loc)
+
+    add = parse.quote(loc)
+
+    print(add)
+
+    return add
+
+
+
+def get_host_profile_weibos(userid):
+    print("日志：现在进入环节，提取微博主的，所有微博")
+
+    page_i = 1
+
+    process_mark = True
+
+    while process_mark:
+
+        """<Sample>: url = 'https://m.weibo.cn/api/container/getIndex?type=uid&value=1259110474'"""
+        url = 'https://m.weibo.cn/api/container/getIndex?type=uid&value=' + userid
+
+        containerid = get_containerid(url)
+
+        if containerid != '':
+
+            """
+            <Sample>: 
+                url = https://m.weibo.cn/api/container/getIndex?
+                        type=uid&value=1259110474&containerid=1076031259110474&page=1
+                """
+
+            weibo_url = 'https://m.weibo.cn/api/container/getIndex?type=uid&value=' + userid + \
+                        '&containerid=' + containerid + '&page=' + str(page_i)
+
+            print(weibo_url)
+            process_mark = try_get_data(page_i, weibo_url, process_mark)
+            page_i += 1
+
+
+        else:
+            process_mark = False
+            page_i += 1
+
+
+
+
+
+# 这一步可简化
+# 获取微博内容的containerid为107603+oid
+def get_containerid(url):
+    print("日志：现在进入，获取，微博主页的containerid，环节")
+
+    while True:
+        r = requests.get(url)
+        data = r.text
+        if data != "No":
+
+            print("日志：下面是，获取，微博主页的containerid，环节中，新浪服务器返回的，data：")
+            #print(data)
+            print("日志：上面是，获取，微博主页的containerid，环节中，新浪服务器返回的，data")
+
+            try:
+                data_json = json.loads(data)
+                print("日志：下面是，获取，微博主页的containerid，环节中，新浪服务器返回的，字段：")
+                print(data_json)
+                print("日志：上面是，获取，微博主页的containerid，环节中，新浪服务器返回的，字段")
+
+                containerid = ''
+                content = data_json.get('data')
+
+                print(content)
+
+                try:
+                    for data in content.get('tabsInfo').get('tabs'):
+                        if data.get('tab_type') == 'weibo':
+                            containerid = data.get('containerid')
+                            print("日志：得到的，containerid 是：", containerid)  #1076031259110474
+
+                    return containerid
+
+
+                except:
+                    print("\n")
+                    print("日志：报错：报错：报错：报错：报错：报错：")
+                    print("日志：获取containerid 报错")
+                    print("\n")
+
+                    exit(1)
+
+                    return containerid
+
+            except json.decoder.JSONDecodeError:
+                print("\n")
+                print("日志：报错：报错：报错：报错：报错：报错：")
+                print("日志：获取containerid 报错")
+                print("\n")
+
+                exit(1)
+        else:
+            time.sleep(1)
+
+
+
+def try_get_data(page_i, weibo_url, process_mark):
+    print("日志：现在进入，按页爬取，微博主的，微博，环节")
+
+    # 初始化，data 变量
+    data = ''
+
+    use_proxy_flag = True
+    while use_proxy_flag:
+
+        r = requests.get(weibo_url)
+        data = r.text
+
+        # 如果返回，No，说明，代理服务器，超时报错
+        if data != "No":
+            use_proxy_flag = False
+        else:
+            time.sleep(1)
+
+    print("日志：下面是，获取cards 环节中，新浪服务器返回的，字段：")
+    #print(data)
+    print("日志：上面是，获取cards 环节中，新浪服务器返回的，字段")
+
+    try:
+        #content = json.loads(data).get('data')
+        content = json.loads(data)
+        print("返回的微博信息")
+        print(content)
+        print("返回的微博信息")
+        content = content.get('data')
+        cards = content.get('cards')
+
+    except json.decoder.JSONDecodeError:
+        print("\n")
+        print("日志：报错：报错：报错：报错：报错：报错：")
+        print("日志：获取cards 报错")
+        print("\n")
+
+        cards = []
+
+        exit(1)
+
+    card_tot_id = 0
+
+    if len(cards) > 0:
+        for j in range(len(cards)):
+
+            print("日志：-----正在爬取第" + str(page_i) + "页，第" + str(j) + "条微博------")
+
+            card_type = cards[j].get('card_type')
+
+            if card_type == 9:
+
+                mblog = cards[j].get('mblog')
+                print("日志：下面是，提取 mblog 环节的，字段：")
+                print(mblog)
+                print("日志：上面是，提取 mblog 环节的，字段：")
+                text = mblog.get('text')
+
+                if len(text) > 0:
+                    idstr = mblog.get('idstr')  # 微博的idstr，储存起来，为后续爬虫再用
+                    # <Sample>: idstr = 4281561774373070
+                    # (Sample): tested_url of weibo: https://m.weibo.cn/status/4281561774373070
+
+                    created_at = mblog.get('created_at')
+                    user_id = mblog["user"]["id"]
+                    gender = mblog["user"]["gender"]
+
+                    # page_title = mblog["page_info"]["page_title"]
+
+                    try:
+                        pics_dicts = mblog['pics']
+                        pic_urls = []
+                        for pic_content in pics_dicts:
+                            pic_urls.append(pic_content['url'])
+
+                    except KeyError:
+                        pic_urls = "None"
+
+                    try:
+
+                        info = mblog["page_info"]
+                        print(info)
+
+                        page_title = mblog["page_info"]["page_title"]
+                        formatted_address = get_lng_lat(page_title)
+
+                    except:  # TypeError:
+                        page_title = 'None'
+                        lng1 = 'None'
+                        lat1 = 'None'
+                        formatted_address = 'None'
+
+                    nowTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # 现在的时间
+                    construct1 = nowTime.split('-')
+
+                    year = construct1[0]
+                    month = construct1[1]
+                    day = ((construct1[2]).split(' '))[0]
+
+                    mark_num = len(created_at.split("-"))
+                    if mark_num == 3:
+                        created_at = created_at
+                    if mark_num == 2:
+                        created_at = year + "-" + created_at
+                    if mark_num == 1:
+                        created_at = year + "-" + month + "-" + day
+
+
+                    contents_json = {"user_id": user_id,
+                                     "idstr": idstr,
+                                     "created_at": created_at,
+                                     "gender": gender,
+                                     #"lng": lng1,
+                                     #"lat": lat1,
+                                     "text": text,
+                                     "page_title": page_title,
+                                     "formatted_address": formatted_address,
+                                     "pic_urls": pic_urls}
+
+
+                    b = str(json.dumps(contents_json)) + "\n"
+                    print("日志，json 收录内容：", '\n')
+                    print(b)
+                    print("日志，上面是，json 收录内容")
+
+                    f_write = open('/Users/yuanmengyue/Desktop/北京市微博用户数据3' + '/' + str(userid) + ".json", 'a+', encoding="utf-8")
+                    f_write.write(b)
+                    f_write.close()
+                    print("写入成功！")
+
+                card_tot_id += 1
+    else:
+        process_mark = False
+
+    return process_mark
+
+
+
+
+userid = 1259110474
+
+get_host_profile_weibos(str(userid))
+
+
+
+'''''''''
+import csv
+
+read_file = "/Users/yuanmengyue/Desktop/微博数据/北京市.csv"
+
+with open(read_file,encoding="gbk") as csvfile1:
+    reader = csv.reader(csvfile1)
+    for row in reader:
+        if row[0] != "id":
+            userid = row[0]
+
+            try:
+                get_host_profile_weibos(userid)
+
+            except:
+                continue
+
+'''''''''
+
